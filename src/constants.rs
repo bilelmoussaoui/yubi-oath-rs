@@ -1,10 +1,7 @@
 use std::fmt::Display;
 
 use iso7816_tlv::simple::Tlv;
-use sha1::{Digest, Sha1};
-use sha2::{Sha256, Sha512};
-use strum::IntoEnumIterator; // 0.17.1
-use strum_macros::EnumIter; // 0.17.1
+use sha1::Digest;
 pub const INS_SELECT: u8 = 0xa4;
 pub const OATH_AID: [u8; 7] = [0xa0, 0x00, 0x00, 0x05, 0x27, 0x21, 0x01];
 
@@ -12,7 +9,7 @@ pub const DEFAULT_PERIOD: u32 = 30;
 pub const DEFAULT_DIGITS: OathDigits = OathDigits::Six;
 pub const DEFAULT_IMF: u32 = 0;
 
-#[derive(Debug, EnumIter, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u16)]
 pub enum ErrorResponse {
     NoSpace = 0x6a84,
@@ -25,30 +22,44 @@ pub enum ErrorResponse {
 }
 
 impl ErrorResponse {
-    pub fn as_string(self) -> String {
-        match self {
-            ErrorResponse::NoSpace => "No Space left on device",
-            ErrorResponse::CommandAborted => "Command aborted",
-            ErrorResponse::InvalidInstruction => "Invalid instruction",
-            ErrorResponse::AuthRequired => "Authentication required",
-            ErrorResponse::WrongSyntax => "Wrong syntax",
-            ErrorResponse::GenericError => "Generic Error",
-            ErrorResponse::NoSuchObject => "No such Object",
-        }
-        .to_string()
-    }
-
     pub fn any_match(code: u16) -> Option<ErrorResponse> {
-        for resp in ErrorResponse::iter() {
-            if code == resp as u16 {
-                return Some(resp);
-            }
+        if code == ErrorResponse::NoSpace as u16 {
+            Some(ErrorResponse::NoSpace)
+        } else if code == ErrorResponse::CommandAborted as u16 {
+            Some(ErrorResponse::CommandAborted)
+        } else if code == ErrorResponse::InvalidInstruction as u16 {
+            Some(ErrorResponse::InvalidInstruction)
+        } else if code == ErrorResponse::AuthRequired as u16 {
+            Some(ErrorResponse::AuthRequired)
+        } else if code == ErrorResponse::WrongSyntax as u16 {
+            Some(ErrorResponse::WrongSyntax)
+        } else if code == ErrorResponse::GenericError as u16 {
+            Some(ErrorResponse::GenericError)
+        } else if code == ErrorResponse::NoSuchObject as u16 {
+            Some(ErrorResponse::NoSuchObject)
+        } else {
+            None
         }
-        None
     }
 }
 
-#[derive(Debug, EnumIter, Clone, Copy)]
+impl std::fmt::Display for ErrorResponse {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NoSpace => f.write_str("No Space left on device"),
+            Self::CommandAborted => f.write_str("Command aborted"),
+            Self::InvalidInstruction => f.write_str("Invalid instruction"),
+            Self::AuthRequired => f.write_str("Authentication required"),
+            Self::WrongSyntax => f.write_str("Wrong syntax"),
+            Self::GenericError => f.write_str("Generic Error"),
+            Self::NoSuchObject => f.write_str("No such Object"),
+        }
+    }
+}
+
+impl std::error::Error for ErrorResponse {}
+
+#[derive(Debug, Clone, Copy)]
 #[repr(u16)]
 pub enum SuccessResponse {
     MoreData = 0x61,
@@ -57,12 +68,13 @@ pub enum SuccessResponse {
 
 impl SuccessResponse {
     pub fn any_match(code: u16) -> Option<SuccessResponse> {
-        for resp in SuccessResponse::iter() {
-            if code == resp as u16 {
-                return Some(resp);
-            }
+        if code == SuccessResponse::MoreData as u16 {
+            Some(SuccessResponse::MoreData)
+        } else if code == SuccessResponse::Okay as u16 {
+            Some(SuccessResponse::Okay)
+        } else {
+            None
         }
-        None
     }
 }
 
@@ -114,18 +126,18 @@ impl HashAlgo {
     // returns a function capable of hashing a byte array
     pub fn get_hash_fun(&self) -> impl Fn(&[u8]) -> Vec<u8> {
         match self {
-            HashAlgo::Sha1 => |m: &[u8]| {
-                let mut hasher = Sha1::new();
+            Self::Sha1 => |m: &[u8]| {
+                let mut hasher = sha1::Sha1::new();
                 hasher.update(m);
                 hasher.finalize().to_vec()
             },
-            HashAlgo::Sha256 => |m: &[u8]| {
-                let mut hasher = Sha256::new();
+            Self::Sha256 => |m: &[u8]| {
+                let mut hasher = sha2::Sha256::new();
                 hasher.update(m);
                 hasher.finalize().to_vec()
             },
-            HashAlgo::Sha512 => |m: &[u8]| {
-                let mut hasher = Sha512::new();
+            Self::Sha512 => |m: &[u8]| {
+                let mut hasher = sha2::Sha512::new();
                 hasher.update(m);
                 hasher.finalize().to_vec()
             },
@@ -135,9 +147,9 @@ impl HashAlgo {
     // returns digest output size in number of bytes
     pub fn digest_size(&self) -> usize {
         match self {
-            HashAlgo::Sha1 => 20,
-            HashAlgo::Sha256 => 32,
-            HashAlgo::Sha512 => 64,
+            Self::Sha1 => 20,
+            Self::Sha256 => 32,
+            Self::Sha512 => 64,
         }
     }
 }
@@ -169,14 +181,6 @@ impl Display for OathCodeDisplay {
 
 impl OathCodeDisplay {
     pub fn from_tlv(tlv: Tlv) -> Option<Self> {
-        if Into::<u8>::into(tlv.tag()) == (Tag::TruncatedResponse as u8) && tlv.value().len() == 5 {
-            let display = OathCodeDisplay::new(tlv.value()[..].try_into().unwrap());
-            Some(display)
-        } else {
-            None
-        }
-    }
-    pub fn from_bytes(tlv: Tlv) -> Option<Self> {
         if Into::<u8>::into(tlv.tag()) == (Tag::TruncatedResponse as u8) && tlv.value().len() == 5 {
             let display = OathCodeDisplay::new(tlv.value()[..].try_into().unwrap());
             Some(display)

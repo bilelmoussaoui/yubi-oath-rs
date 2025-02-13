@@ -1,20 +1,9 @@
-#[crate_type = "lib"]
-use crate::lib_ykoath2::*;
-/// Utilities for interacting with YubiKey OATH/TOTP functionality
-extern crate pcsc;
-use pbkdf2::pbkdf2_hmac_array;
-use regex::Regex;
-use sha1::Sha1;
+use std::{
+    cmp::Ordering,
+    hash::{Hash, Hasher},
+};
 
-use std::str::{self};
-
-use base64::{engine::general_purpose, Engine as _};
-use hmac::{Hmac, Mac};
-
-use std::cmp::Ordering;
-use std::hash::{Hash, Hasher};
-
-use std::time::SystemTime;
+use crate::CredentialIDData;
 
 #[derive(Debug, Clone)]
 pub struct OathCredential {
@@ -46,13 +35,13 @@ impl PartialOrd for OathCredential {
     }
 }
 
-impl<'a> PartialEq for OathCredential {
+impl PartialEq for OathCredential {
     fn eq(&self, other: &Self) -> bool {
         self.device_id == other.device_id && self.id_data == other.id_data
     }
 }
 
-impl<'a> Hash for OathCredential {
+impl Hash for OathCredential {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.device_id.hash(state);
         self.id_data.format_cred_id().hash(state);

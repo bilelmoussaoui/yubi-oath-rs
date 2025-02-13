@@ -1,13 +1,8 @@
-#![crate_type = "lib"]
-use crate::lib_ykoath2::*;
-/// Utilities for interacting with YubiKey OATH/TOTP functionality
-extern crate pcsc;
+use std::fmt::Display;
+
 use regex::Regex;
 
-use std::{
-    fmt::Write,
-    str::{self},
-};
+use crate::{to_tlv, OathType, Tag, DEFAULT_PERIOD};
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct CredentialIDData {
@@ -28,7 +23,11 @@ impl Display for CredentialIDData {
 
 impl CredentialIDData {
     pub fn from_tlv(id_bytes: &[u8], oath_type_tag: iso7816_tlv::simple::Tag) -> Self {
-        return CredentialIDData::from_bytes(id_bytes, Into::<u8>::into(oath_type_tag));
+        CredentialIDData::from_bytes(id_bytes, Into::<u8>::into(oath_type_tag))
+    }
+
+    pub fn as_tlv(&self) -> Vec<u8> {
+        to_tlv(Tag::Name, &self.format_cred_id())
     }
 
     pub fn format_cred_id(&self) -> Vec<u8> {
@@ -43,12 +42,12 @@ impl CredentialIDData {
         }
 
         cred_id.push_str(self.name.as_str());
-        return cred_id.into_bytes(); // Convert the string to bytes
+        cred_id.into_bytes() // Convert the string to bytes
     }
 
     // Function to parse the credential ID
     fn parse_cred_id(cred_id: &[u8], oath_type: OathType) -> (Option<String>, String, u32) {
-        let data = match str::from_utf8(cred_id) {
+        let data = match std::str::from_utf8(cred_id) {
             Ok(d) => d,
             Err(_) => return (None, String::new(), 0), // Handle invalid UTF-8
         };
@@ -56,19 +55,19 @@ impl CredentialIDData {
         if oath_type == OathType::Totp {
             Regex::new(r"^((\d+)/)?(([^:]+):)?(.+)$")
                 .ok()
-                .and_then(|r| r.captures(&data))
+                .and_then(|r| r.captures(data))
                 .map_or((None, data.to_string(), DEFAULT_PERIOD), |caps| {
-                    let period = (&caps.get(2))
+                    let period = caps
+                        .get(2)
                         .and_then(|s| s.as_str().parse::<u32>().ok())
                         .unwrap_or(DEFAULT_PERIOD);
-                    return (Some(caps[4].to_string()), caps[5].to_string(), period);
+                    (Some(caps[4].to_string()), caps[5].to_string(), period)
                 })
         } else {
-            return data
-                .split_once(':')
+            data.split_once(':')
                 .map_or((None, data.to_string(), 0), |(i, n)| {
                     (Some(i.to_string()), n.to_string(), 0)
-                });
+                })
         }
     }
 
@@ -79,11 +78,11 @@ impl CredentialIDData {
             OathType::Totp
         };
         let (issuer, name, period) = CredentialIDData::parse_cred_id(id_bytes, oath_type);
-        return CredentialIDData {
+        CredentialIDData {
             issuer,
             name,
             period,
             oath_type,
-        };
+        }
     }
 }
